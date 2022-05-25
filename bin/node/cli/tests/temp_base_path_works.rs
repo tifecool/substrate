@@ -33,7 +33,7 @@ use std::{
 pub mod common;
 
 #[tokio::test]
-async fn temp_base_path_works() {
+async fn fix11321_temp_base_path_works() {
 	let mut cmd = Command::new(cargo_bin("substrate"));
 	let mut child = common::KillChildOnDrop(
 		cmd.args(&["--dev", "--tmp", "--no-hardware-benchmarks"])

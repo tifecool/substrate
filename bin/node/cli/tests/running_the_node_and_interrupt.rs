@@ -31,12 +31,12 @@ use tempfile::tempdir;
 pub mod common;
 
 #[tokio::test]
-async fn running_the_node_works_and_can_be_interrupted() {
+async fn fix11321_running_the_node_works_and_can_be_interrupted() {
 	async fn run_command_and_kill(signal: Signal) {
 		let base_path = tempdir().expect("could not create a temp dir");
-		let mut cmd = common::KillChildOnDrop(
-			Command::new(cargo_bin("substrate"))
-				.stdout(process::Stdio::piped())
+		let mut cmd = Command::new(cargo_bin("substrate"));
+		let mut child = common::KillChildOnDrop(
+			cmd.stdout(process::Stdio::piped())
 				.stderr(process::Stdio::piped())
 				.args(&["--dev", "-d"])
 				.arg(base_path.path())
@@ -46,17 +46,17 @@ async fn running_the_node_works_and_can_be_interrupted() {
 				.unwrap(),
 		);
 
-		let stderr = cmd.stderr.take().unwrap();
+		let stderr = child.stderr.take().unwrap();
 
 		let (ws_url, _) = common::find_ws_url_from_output(stderr);
 
 		common::wait_n_finalized_blocks(3, 30, &ws_url)
 			.await
 			.expect("Blocks are produced in time");
-		assert!(cmd.try_wait().unwrap().is_none(), "the process should still be running");
-		kill(Pid::from_raw(cmd.id().try_into().unwrap()), signal).unwrap();
+		assert!(child.try_wait().unwrap().is_none(), "the process should still be running");
+		kill(Pid::from_raw(child.id().try_into().unwrap()), signal).unwrap();
 		assert_eq!(
-			common::wait_for(&mut cmd, 30).map(|x| x.success()),
+			common::wait_for(&mut child, 30).map(|x| x.success()),
 			Ok(true),
 			"the process must exit gracefully after signal {}",
 			signal,
