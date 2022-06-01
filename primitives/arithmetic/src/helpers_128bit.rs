@@ -62,14 +62,16 @@ pub fn to_big_uint(x: u128) -> biguint::BigUint {
 /// Safely and accurately compute `a * b / c`. The approach is:
 ///   - Simply try `a * b / c`.
 ///   - Else, convert them both into big numbers and re-try. `Err` is returned if the result cannot
-///     be safely casted back to u128.
+///     be safely casted back to i128.
 ///
-/// Invariant: c must be greater than or equal to 1.
-pub fn multiply_by_rational(mut a: u128, mut b: u128, mut c: u128) -> Result<u128, &'static str> {
+/// Invariant: c mustn't be 0.
+pub fn multiply_by_rational_with_rounding(mut a: i128, mut b: i128, mut c: i128) -> Result<i128, &'static str> {
 	if a.is_zero() || b.is_zero() {
 		return Ok(Zero::zero())
 	}
-	c = c.max(1);
+	if c.is_zero() {
+		c = c.max(1);
+	}
 
 	// a and b are interchangeable by definition in this function. It always helps to assume the
 	// bigger of which is being multiplied by a `0 < b/c < 1`. Hence, a should be the bigger and
@@ -91,9 +93,14 @@ pub fn multiply_by_rational(mut a: u128, mut b: u128, mut c: u128) -> Result<u12
 		// This is the safest way to go. Try it.
 		Ok(x / c)
 	} else {
-		let a_num = to_big_uint(a);
-		let b_num = to_big_uint(b);
-		let c_num = to_big_uint(c);
+
+		let a_negative = if a < 0 { -1 } else { 1 };
+		let b_negative = if b < 0 { -1 } else { 1 };
+		let c_negative = if c < 0 { -1 } else { 1 };
+
+		let a_num = to_big_uint(a as u128);
+		let b_num = to_big_uint(b as u128);
+		let c_num = to_big_uint(c as u128);
 
 		let mut ab = a_num * b_num;
 		ab.lstrip();
@@ -108,12 +115,20 @@ pub fn multiply_by_rational(mut a: u128, mut b: u128, mut c: u128) -> Result<u12
 			// always return Some.
 			let (mut q, r) = ab.div(&c_num, true).unwrap_or((Zero::zero(), Zero::zero()));
 			let r: u128 = r.try_into().expect("reminder of div by c is always less than c; qed");
-			if r > (c / 2) {
+			if r > (c as u128/ 2) {
 				q = q.add(&to_big_uint(1));
 			}
 			q
 		};
 		q.lstrip();
-		q.try_into().map_err(|_| "result cannot fit in u128")
+
+		let negative_multiplier = a_negative * b_negative * c_negative;
+
+		let result= q.try_into().map_err(|_| "result cannot fit in i128");
+		if let Ok(i) = result{
+			Ok(i*negative_multiplier)
+		}else{
+			result
+		}
 	}
 }
