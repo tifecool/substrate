@@ -18,12 +18,12 @@
 //! Decimal Fixed Point implementations for Substrate runtime.
 
 use crate::{
-	helpers_128bit::multiply_by_rational_with_rounding,
+	helpers_128bit::{multiply_by_rational, multiply_by_rational_with_rounding, sqrt},
 	traits::{
 		Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedNeg, CheckedSub, One,
 		SaturatedConversion, Saturating, UniqueSaturatedInto, Zero,
 	},
-	PerThing,
+	PerThing, Perbill, Rounding, SignedRounding,
 };
 use codec::{CompactAs, Decode, Encode};
 use sp_std::{
@@ -151,7 +151,7 @@ pub trait FixedPointNumber:
 		let d: I129 = d.into();
 		let negative = n.negative != d.negative;
 
-		multiply_by_rational_with_rounding(n.value, Self::DIV.unique_saturated_into(), d.value)
+		multiply_by_rational(n.value, Self::DIV.unique_saturated_into(), d.value)
 			.ok()
 			.and_then(|value| from_i129(I129 { value, negative }))
 			.map(Self::from_inner)
@@ -165,7 +165,7 @@ pub trait FixedPointNumber:
 		let rhs: I129 = n.into();
 		let negative = lhs.negative != rhs.negative;
 
-		multiply_by_rational_with_rounding(lhs.value, rhs.value, Self::DIV.unique_saturated_into())
+		multiply_by_rational(lhs.value, rhs.value, Self::DIV.unique_saturated_into())
 			.ok()
 			.and_then(|value| from_i129(I129 { value, negative }))
 	}
@@ -522,7 +522,11 @@ macro_rules! implement_fixed {
 				let rhs: I129 = other.0.into();
 				let negative = lhs.negative != rhs.negative;
 
-				multiply_by_rational_with_rounding(lhs.value, Self::DIV as u128, rhs.value)
+				// Note that this uses the old (well-tested) code with sign-ignorant rounding. This
+				// is equivalent to the `SignedRounding::NearestPrefMinor`. This means it is
+				// expected to give exactly the same result as `const_checked_div` when the result
+				// is positive and a result up to one epsilon greater when it is negative.
+				multiply_by_rational(lhs.value, Self::DIV as u128, rhs.value)
 					.ok()
 					.and_then(|value| from_i129(I129 { value, negative }))
 					.map(Self)
@@ -535,7 +539,7 @@ macro_rules! implement_fixed {
 				let rhs: I129 = other.0.into();
 				let negative = lhs.negative != rhs.negative;
 
-				multiply_by_rational_with_rounding(lhs.value, rhs.value, Self::DIV as u128)
+				multiply_by_rational(lhs.value, rhs.value, Self::DIV as u128)
 					.ok()
 					.and_then(|value| from_i129(I129 { value, negative }))
 					.map(Self)
